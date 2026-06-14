@@ -1,78 +1,98 @@
 # Fleet Docker Deployment
 
-A quick and easy method for creating a production-ready FleetDM environment using only Docker Compose. 
+A Docker Compose deployment for FleetDM with Traefik handling TLS termination.
 
 ## Services
 
-- MySQL
-- Redis
+- MySQL 8.0
+- Redis 7
 - Fleet
 - Traefik
 
-## Configuration Files
+## Requirements
 
-All services are configured using the `default.env` file included in the folder for that service. 
+- Docker and Docker Compose v2
+- Ports `80` and `443` open on the host
+- A DNS A-record pointing to your host (e.g. `fleet.example.com`)
 
-## Fleet configuration details
+## First-time Setup
 
-Bare bones version of Fleet with filesystem logging options. 
-
-## Data persistence
-
-All data is stored on the host machine in the folder for the service it is associated with. Data will persist after the restart as long as the local folder is not deleted. Can be changed in docker-compose.yml
-
-
-## Usage
-
-- Clone this repository
-- Move to desired location
-- From root of repo, run "docker compose up"
-
-Please make sure to edit `fleet/default.env` and `mysql/default.env` and replace the example passwords with secure ones. Especially if you intend to make your instance publicly available.
-
-## TLS
-
-This repository includes two basic examples of how to enable TLS based on `traefik`.
-
-To be able to expose the installation, please make sure that:
-- Ports `80` and `443` are open/reachable
-- A `DNS` entry exists that points to your host (A-record pointing to `fleet.example.com`)
-
-### Standalone setup
-
-This approach includes a `traefik` container with the required configuration in the docker-compose file `docker-compose-standalone.yml`.
-
-To create a TLS-based instance of Fleet, a few steps are required:
 ```bash
 # Create required directories
-mkdir fleet/{logs,vulndb} mysql/data
+mkdir -p fleet/{logs,vulndb} mysql/data
+
 # Fix permissions
 sudo chmod -R o+w fleet/{logs,vulndb} mysql/data
 chmod 600 config/ACME/acme.json
-# Create the docker network for the edge router
+
+# Create the Docker network for Traefik
 docker network create traefik_proxy
-# Edit the docker-compose file and replace `fleet.example.com` with the DNS record that targets your host
-nano -w docker-compose-traefik-standalone.yml
-# Edit the traefik config file and replace `email@example.com` with your email address
-nano -w config/traefik.toml
-# Launch the instance
-docker compose -f docker-compose-traefik-standalone.yml up -d --force-recreate && docker compose -f docker-compose-traefik-standalone.yml logs -f
+
+# Copy and edit the environment file
+cp .env.example .env
+nano .env
+
+# Edit service credentials
+nano fleet/default.env
+nano mysql/default.env
+
+# Edit the Traefik config and replace email@example.com with your address
+nano config/traefik.toml
 ```
 
-### External traefik stack
+## Configuration
 
-It is the recommended procedure to run `traefik` in a separate `docker-compose` stack. This way, multiple `docker-compose` projects can share a common `traefik` edge router.
+**`.env`** controls the Fleet version and domain:
 
-Feel free to get inspired by this example repository for the `traefik` stack: https://github.com/cbirkenbeul/docker-homelab/tree/master/compose-files-traefik-predefined/traefik
+```env
+FLEET_VERSION=v4.58.0
+FLEET_DOMAIN=fleet.example.com
+```
 
-Once your `traefik` instance is up and running, there are only a few steps required to deploy `fleet`:
+**`fleet/default.env`** and **`mysql/default.env`** hold service credentials. Replace all example passwords before exposing the instance publicly.
+
+## Usage
+
+All operations go through `fleet.sh`:
+
 ```bash
-# Create required directories
-mkdir fleet/{logs,vulndb} mysql/data
-# Fix permissions
-sudo chmod -R o+w fleet/{logs,vulndb} mysql/data
-# Edit the docker-compose file and replace `fleet.example.com` with the DNS record that targets your host
-nano -w docker-compose-traefik.yml
-# Launch the instance
-docker compose -f docker-compose-traefik.yml up -d --force-recreate && docker compose -f docker-compose-traefik.yml logs -f
+# Start the stack
+./fleet.sh up
+
+# Stop the stack
+./fleet.sh down
+
+# Restart only the Fleet service
+./fleet.sh restart
+
+# Upgrade Fleet to a new version
+./fleet.sh upgrade
 ```
+
+To follow logs after starting:
+
+```bash
+docker compose -f docker-compose-traefik-standalone.yml logs -f fleet
+```
+
+## Upgrading Fleet
+
+```bash
+./fleet.sh upgrade
+```
+
+The script will prompt for the new version tag (e.g. `v4.59.0`), update `.env`, pull the new image, run migrations, and restart the Fleet service.
+
+## Data Persistence
+
+All data is stored on the host under the service folders (`mysql/data`, `fleet/logs`, `fleet/vulndb`). Data survives container restarts as long as those directories are not deleted.
+
+## External Traefik Stack
+
+If you prefer to run Traefik as a separate stack shared across multiple projects, use `docker-compose-traefik.yml` instead:
+
+```bash
+docker compose -f docker-compose-traefik.yml up -d
+```
+
+See [this example repository](https://github.com/cbirkenbeul/docker-homelab/tree/master/compose-files-traefik-predefined/traefik) for a reference Traefik stack setup.
