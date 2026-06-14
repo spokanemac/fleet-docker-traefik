@@ -1,25 +1,50 @@
 ---
-version: '3.7'
+services:
 
-services: 
-
-  mysql: 
-    image: mysql
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
     volumes:
       - ./mysql/data:/var/lib/mysql
     env_file: mysql/default.env
     cap_add:
       - SYS_NICE
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   redis:
-    image: redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  fleet: 
-    image: fleetdm/fleet
+  fleet-migrate:
+    image: fleetdm/fleet:${FLEET_VERSION:-latest}
+    command: fleet prepare db --no-prompt
+    env_file: fleet/default.env
+    volumes:
+      - ./fleet:/fleet/
     depends_on:
-      - mysql
-      - redis
-    command: sh -c "/usr/bin/fleet prepare db --no-prompt && /usr/bin/fleet serve"
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  fleet:
+    image: fleetdm/fleet:${FLEET_VERSION:-latest}
+    command: fleet serve
+    restart: unless-stopped
+    depends_on:
+      fleet-migrate:
+        condition: service_completed_successfully
     env_file: fleet/default.env
     volumes:
       - ./fleet:/fleet/
@@ -28,7 +53,7 @@ services:
     labels:
       traefik.enable: true
       traefik.http.routers.fleet.entrypoints: "websecure"
-      traefik.http.routers.fleet.rule: "Host(`fleet.example.com`)"
+      traefik.http.routers.fleet.rule: "Host(`${FLEET_DOMAIN:-fleet.example.com}`)"
       traefik.http.services.fleet.loadbalancer.server.port: "8412"
       traefik.http.routers.fleet.tls: true
       traefik.http.routers.fleet.tls.certresolver: "default"
@@ -37,28 +62,20 @@ services:
       - default
 
   traefik:
-    image: traefik:v2.7
+    image: traefik:v2.11
     container_name: traefik
+    restart: unless-stopped
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/etc/traefik
-    # labels:
-    #  - "traefik.enable=true"
-    #  - "traefik.http.routers.traefik.rule=Host(`traefik.example.com`)"
-    #  - "traefik.http.routers.traefik.entrypoints=websecure"
-    #  - "traefik.http.routers.traefik.tls.certresolver=default"
-    #  - "traefik.http.routers.traefik.service=api@internal"
-    #  - "traefik.http.routers.traefik.middlewares=auth@docker"
-    #  - "traefik.http.middlewares.auth.basicauth.users=user:pass"
     networks:
       - traefik_proxy
       - default
     ports:
       - "80:80"
       - "443:443"
-    restart: unless-stopped
 
 networks:
   traefik_proxy:
