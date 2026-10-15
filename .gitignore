@@ -1,9 +1,10 @@
 .DS_Store
 
 fleet/*
-!fleet/default.env
-!fleet/tmp
+!fleet/default.env.example
 
 mysql/*
-!mysql/default.env
+!mysql/default.env.example
 .env
+
+config/ACME/acme.json

@@ -24,11 +24,8 @@ http:
         browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
-        sslRedirect: true
         #  HSTS Configuration
         stsIncludeSubdomains: true
         stsPreload: true
         stsSeconds: 31536000
-        customRequestHeaders:
-          X-Frame-Options: "SAMEORIGIN"
         customFrameOptionsValue: "SAMEORIGIN"

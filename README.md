@@ -23,6 +23,10 @@ mkdir -p fleet/{logs,vulndb} mysql/data
 
 # Fix permissions
 sudo chmod -R o+w fleet/{logs,vulndb} mysql/data
+
+# Create the ACME certificate store (Traefik requires mode 600)
+mkdir -p config/ACME
+touch config/ACME/acme.json
 chmod 600 config/ACME/acme.json
 
 # Create the Docker network for Traefik
@@ -32,7 +36,11 @@ docker network create traefik_proxy
 cp .env.example .env
 nano .env
 
-# Edit service credentials
+# Copy the credential templates and replace every CHANGE_ME
+# (generate values with e.g. `openssl rand -base64 24`)
+cp fleet/default.env.example fleet/default.env
+cp mysql/default.env.example mysql/default.env
+chmod 600 fleet/default.env mysql/default.env
 nano fleet/default.env
 nano mysql/default.env
 
@@ -45,11 +53,13 @@ nano config/traefik.toml
 **`.env`** controls the Fleet version and domain:
 
 ```env
-FLEET_VERSION=v4.58.0
+FLEET_VERSION=v4.86.2
 FLEET_DOMAIN=fleet.example.com
 ```
 
-**`fleet/default.env`** and **`mysql/default.env`** hold service credentials. Replace all example passwords before exposing the instance publicly.
+**`fleet/default.env`** and **`mysql/default.env`** hold service credentials. They are created from the `*.example` templates and are git-ignored, so secrets never get committed. `FLEET_MYSQL_PASSWORD` must match `MYSQL_PASSWORD`. `fleet.sh` refuses to start while any `CHANGE_ME` placeholder remains.
+
+The Fleet router uses the `secHeaders` middleware from `config/dynamic.yml` (HSTS, nosniff, frame options).
 
 ## Usage
 
@@ -81,7 +91,7 @@ docker compose -f docker-compose-traefik-standalone.yml logs -f fleet
 ./fleet.sh upgrade
 ```
 
-The script will prompt for the new version tag (e.g. `v4.59.0`), update `.env`, pull the new image, run migrations, and restart the Fleet service.
+The script will prompt for the new version tag (e.g. `v4.87.0`), update `.env`, pull the new image, run migrations, and restart the Fleet service.
 
 ## Data Persistence
 

@@ -57,6 +57,7 @@ services:
       traefik.http.services.fleet.loadbalancer.server.port: "8412"
       traefik.http.routers.fleet.tls: true
       traefik.http.routers.fleet.tls.certresolver: "default"
+      traefik.http.routers.fleet.middlewares: "secHeaders@file"
     networks:
       - traefik_proxy
       - default
